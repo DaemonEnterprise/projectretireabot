@@ -153,10 +153,13 @@ var deploymentSuffix = toLower(trim(replace(
   ''
 )))
 
+// ARM evaluates these validation variables even though they are not referenced elsewhere.
+#disable-next-line no-unused-vars
 var outputCheck = !(resolvedHttpEndpoint.enabled && resolvedHttpEndpoint.includeOutput) && length(workItemBackend) == 0 && length(dataSinkBackend) == 0
   ? fail('You need at least one output when trying to deploy this app. Minimum you need to have the HTTP endpoint enabled with output or at least one WorkItem/DataSink backend configured.')
   : null
 
+#disable-next-line no-unused-vars
 var gitHubCredentialValidation = empty(resolvedGitHubOptions.PAT) && empty(resolvedGitHubOptions.appId) && empty(resolvedGitHubOptions.installId) && empty(resolvedGitHubOptions.privateKeyId) && empty(resolvedGitHubOptions.privateKeyPath) && contains(
     workItemBackend,
     'GitHub'
@@ -172,6 +175,7 @@ var gitHubAppParamsPopulated = [
 ]
 
 var gitHubParamCount = reduce(gitHubAppParamsPopulated, 0, (cur, next) => cur + next)
+#disable-next-line no-unused-vars
 var gitHubParamCountValidation = !(gitHubParamCount == 0 || gitHubParamCount == 4) && contains(
     workItemBackend,
     'GitHub'
@@ -179,6 +183,7 @@ var gitHubParamCountValidation = !(gitHubParamCount == 0 || gitHubParamCount == 
   ? fail('To use GitHub App authentication, you need to populate all required fields')
   : null
 
+#disable-next-line no-unused-vars
 var adoOrganisationUrlValidation = empty(resolvedAzureDevOpsOptions.organisationUrl) && contains(
     workItemBackend,
     'AzureDevOps'
