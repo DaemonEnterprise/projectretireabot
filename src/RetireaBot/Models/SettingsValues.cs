@@ -32,11 +32,16 @@ namespace Microsoft.RetireaBot.Models
         public string AdvisoryParentLabel => K();
         public string AdvisoryLabelPrefix => K();
         public string AdvisoryParentLabelPrefix => K();
+        public string CreateParentWorkItems => K();
+        public string CreateChildWorkItems => K();
         public string PAT => K();
         public string TargetRepository => K();
+        public string IncludeResourceId => K();
         public string UnmappedRepository => K();
+        public string UseTriageRepoForUnmapped => K();
         public string TargetResourceGroup => K();
         public string TargetContainerMapping => K();
+        public string WorkItemScope => K();
     }
 
     public sealed class GitHubKeys : VendorKeys
@@ -88,18 +93,14 @@ namespace Microsoft.RetireaBot.Models
         public static class App
         {
             public const string AssignGitHubCopilot = "App:AssignGitHubCopilot";
-            public const string CreateParentWorkItems = "App:CreateParentWorkItems";
-            public const string CreateChildWorkItems = "App:CreateChildWorkItems";
             public const string DataSinkBackend = "App:DataSinkBackend";
             public const string HTTPEndpointEnable = "App:HTTPEndpointEnable";
             public const string HTTPEndpointOutput = "App:HTTPEndpointOutput";
             public const string HTTPEndpointWhatIf = "App:HTTPEndpointWhatIf";
             public const string LifecycleSignalsEnable = "App:LifecycleSignalsEnable";
             public const string LifecycleWarningWindowDays = "App:LifecycleWarningWindowDays";
-            public const string UseTriageRepoForUnmapped = "App:UseTriageRepoForUnmapped";
             public const string WorkItemBackend = "App:WorkItemBackend";
             public const string IncludeResolvedAdvisories = "App:IncludeResolvedAdvisories";
-            public const string WorkItemScope = "App:WorkItemScope";
         }
 
         public static class KeyVault

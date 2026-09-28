@@ -23,6 +23,8 @@ namespace Microsoft.RetireaBot.Helpers.AzureDevOps
         private readonly string _advisoryLabelPrefix;
         private readonly string _parentLabelPrefix;
 
+        private readonly IVendorSettings _vendorSettings;
+
         private readonly string _workItemDefaultAssignee;
         private readonly string _workItemOpenState;
         private readonly string _workItemClosedState;
@@ -36,11 +38,11 @@ namespace Microsoft.RetireaBot.Helpers.AzureDevOps
 
             _credentialProvider = credentialProvider;
 
-            IVendorSettings s = vendorSettings.For(WorkItemBackend.AzureDevOps);
-            _advisoryLabel = s.AdvisoryLabel;
-            _advisoryParentLabel = s.AdvisoryParentLabel;
-            _advisoryLabelPrefix = s.AdvisoryLabelPrefix;
-            _parentLabelPrefix = s.AdvisoryParentLabelPrefix;
+            _vendorSettings = vendorSettings.For(WorkItemBackend.AzureDevOps);
+            _advisoryLabel = _vendorSettings.AdvisoryLabel;
+            _advisoryParentLabel = _vendorSettings.AdvisoryParentLabel;
+            _advisoryLabelPrefix = _vendorSettings.AdvisoryLabelPrefix;
+            _parentLabelPrefix = _vendorSettings.AdvisoryParentLabelPrefix;
 
             _workItemDefaultAssignee = config.GetSection(ConfigKeys.AzureDevOps.WorkItemDefaultAssignee).Get<string>() ?? "";
             _workItemOpenState = config.GetSection(ConfigKeys.AzureDevOps.WorkItemOpenState).Get<string>() ?? "New";
@@ -152,7 +154,7 @@ namespace Microsoft.RetireaBot.Helpers.AzureDevOps
 <ul>
 <li><strong>Retirement Date:</strong> {props.ExtendedProperties?.RetirementDate}</li>
 <li><strong>Retirement Feature:</strong> {props.ExtendedProperties?.RetirementFeatureName}</li>
-<li><strong>Resource ID:</strong> {props.ResourceMetadata?.ResourceId}</li>
+{(_vendorSettings.IncludeResourceId ? $"<li><strong>Resource ID:</strong> {props.ResourceMetadata?.ResourceId}</li>" : "")}
 <li><strong>Last Updated:</strong> {props.LastUpdated}</li>
 </ul>
 

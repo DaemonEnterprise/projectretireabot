@@ -10,10 +10,15 @@ namespace Microsoft.RetireaBot.Models
         string AdvisoryLabelPrefix { get; }
         string AdvisoryParentLabelPrefix { get; }
         WorkItemBackend Backend { get; }
+        bool CreateParentWorkItems { get; }
+        bool CreateChildWorkItems { get; }
         string TargetRepository { get; }
+        bool IncludeResourceId { get; }
         List<AzureRepositoryMap> TargetContainerMapping { get; }
         string? TargetResourceGroup { get; }
         string? UnmappedRepository { get; }
+        bool UseTriageRepoForUnmapped { get; }
+        WorkItemScope WorkItemScope { get; }
     }
 
     public interface IDataSinkSettings

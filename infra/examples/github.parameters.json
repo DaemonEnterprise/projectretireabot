@@ -1,0 +1,32 @@
+{
+  "$schema": "https://schema.management.azure.com/schemas/2015-01-01/deploymentParameters.json#",
+  "contentVersion": "1.0.0.0",
+  "parameters": {
+    "deploymentName": {
+      "value": "azeg"
+    },
+    "location": {
+      "value": "uksouth"
+    },
+    "workItemBackend": {
+      "value": [
+        "GitHub"
+      ]
+    },
+    "dataSinkBackend": {
+      "value": []
+    },
+    "gitHubOptions": {
+      "value": {
+        "appId": "12345",
+        "installId": "12345",
+        "PAT": "github_pat_replace_me",
+        "privateKeyId": "app_private_key",
+        "privateKeyPath": "path/to/my/private.key",
+        "routing": {
+          "targetRepository": "ExampleOwner/ExampleRepository"
+        }
+      }
+    }
+  }
+}

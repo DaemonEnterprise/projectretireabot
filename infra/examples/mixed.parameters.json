@@ -1,0 +1,47 @@
+{
+  "$schema": "https://schema.management.azure.com/schemas/2015-01-01/deploymentParameters.json#",
+  "contentVersion": "1.0.0.0",
+  "parameters": {
+    "deploymentName": {
+      "value": "azeg"
+    },
+    "location": {
+      "value": "uksouth"
+    },
+    "workItemBackend": {
+      "value": [
+        "GitHub",
+        "AzureDevOps"
+      ]
+    },
+    "dataSinkBackend": {
+      "value": [
+        "PowerBI"
+      ]
+    },
+    "azureDevOpsOptions": {
+      "value": {
+        "organisationUrl": "https://dev.azure.com/ExampleOrganisation",
+        "PAT": "replace_with_azure_devops_pat",
+        "routing": {
+          "targetRepository": "ExampleProject"
+        }
+      }
+    },
+    "gitHubOptions": {
+      "value": {
+        "PAT": "github_pat_replace_me",
+        "routing": {
+          "targetRepository": "ExampleOwner/ExampleRepository"
+        }
+      }
+    },
+    "powerBIOptions": {
+      "value": {
+        "workspaceId": "00000000-0000-0000-0000-000000000000",
+        "datasetId": "00000000-0000-0000-0000-000000000000",
+        "tableName": "RetirementAdvisories"
+      }
+    }
+  }
+}

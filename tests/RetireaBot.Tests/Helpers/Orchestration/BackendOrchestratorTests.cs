@@ -20,10 +20,14 @@ namespace Microsoft.RetireaBot.Tests.Helpers.Orchestration
             {
                 [ConfigKeys.GitHub.TargetRepository] = "github-owner/github-repo",
                 [ConfigKeys.AzureDevOps.TargetRepository] = "ado-project",
-                [ConfigKeys.App.WorkItemScope] = nameof(WorkItemScope.Monolithic),
-                [ConfigKeys.App.CreateParentWorkItems] = "true",
-                [ConfigKeys.App.CreateChildWorkItems] = "true",
-                [ConfigKeys.App.UseTriageRepoForUnmapped] = "false"
+                [ConfigKeys.AzureDevOps.WorkItemScope] = nameof(WorkItemScope.Monolithic),
+                [ConfigKeys.AzureDevOps.CreateParentWorkItems] = "true",
+                [ConfigKeys.AzureDevOps.CreateChildWorkItems] = "true",
+                [ConfigKeys.AzureDevOps.UseTriageRepoForUnmapped] = "false",
+                [ConfigKeys.GitHub.WorkItemScope] = nameof(WorkItemScope.Monolithic),
+                [ConfigKeys.GitHub.CreateParentWorkItems] = "true",
+                [ConfigKeys.GitHub.CreateChildWorkItems] = "true",
+                [ConfigKeys.GitHub.UseTriageRepoForUnmapped] = "false"
             };
 
             if (overrides != null)
@@ -291,7 +295,7 @@ namespace Microsoft.RetireaBot.Tests.Helpers.Orchestration
         {
             var config = BuildConfig(new Dictionary<string, string?>
             {
-                [ConfigKeys.App.CreateParentWorkItems] = "false"
+                [ConfigKeys.GitHub.CreateParentWorkItems] = "false"
             });
 
             var githubClient = new Mock<IWorkItemClient>();
@@ -317,7 +321,7 @@ namespace Microsoft.RetireaBot.Tests.Helpers.Orchestration
         {
             var config = BuildConfig(new Dictionary<string, string?>
             {
-                [ConfigKeys.App.CreateChildWorkItems] = "false"
+                [ConfigKeys.GitHub.CreateChildWorkItems] = "false"
             });
 
             var githubClient = new Mock<IWorkItemClient>();
@@ -335,6 +339,126 @@ namespace Microsoft.RetireaBot.Tests.Helpers.Orchestration
             Assert.Equal(GetRetirementsResult.Success, outputs[0].Status);
             Assert.Empty(outputs[0].Created);
             githubClient.Verify(x => x.CreateBatchAsync(It.IsAny<List<Advisory>>(), It.IsAny<string>(), It.IsAny<bool>(), It.IsAny<bool>()), Times.Never);
+        }
+
+        [Fact]
+        public async Task RunAsync_MixedBackends_HonorIndependentRoutingAndCreationSettings()
+        {
+            var config = BuildConfig(new Dictionary<string, string?>
+            {
+                [ConfigKeys.GitHub.WorkItemScope] = nameof(WorkItemScope.PerContainer),
+                [ConfigKeys.GitHub.TargetContainerMapping] = """[{"name":"rg-1","type":"ResourceGroup","target":"github-owner/rg-repo"}]""",
+                [ConfigKeys.GitHub.CreateParentWorkItems] = "true",
+                [ConfigKeys.GitHub.CreateChildWorkItems] = "false",
+                [ConfigKeys.AzureDevOps.WorkItemScope] = nameof(WorkItemScope.Monolithic),
+                [ConfigKeys.AzureDevOps.CreateParentWorkItems] = "false",
+                [ConfigKeys.AzureDevOps.CreateChildWorkItems] = "true"
+            });
+            Advisory advisory = CreateAdvisory("mixed-advisory", "type-mixed");
+
+            var githubClient = new Mock<IWorkItemClient>();
+            githubClient.SetupGet(x => x.Backend).Returns(WorkItemBackend.GitHub);
+            githubClient.Setup(x => x.FindExistingByAdvisoryAsync(It.IsAny<List<Advisory>>(), "github-owner/rg-repo"))
+                .ReturnsAsync(new Dictionary<string, WorkItem>
+                {
+                    [advisory.Name] = CreateWorkItem("1", "Existing GitHub child")
+                });
+            githubClient.Setup(x => x.FindOrCreateParentAsync(
+                    advisory.Properties.RecommendationTypeId,
+                    advisory,
+                    It.IsAny<Dictionary<string, List<WorkItem>>>(),
+                    "github-owner/github-repo",
+                    false))
+                .ReturnsAsync(new ParentWorkItemResult
+                {
+                    Action = ParentWorkItemAction.Created,
+                    ChildCount = 1,
+                    RecommendationTypeId = advisory.Properties.RecommendationTypeId,
+                    WorkItem = CreateWorkItem("10", "GitHub parent")
+                });
+
+            var adoClient = new Mock<IWorkItemClient>();
+            adoClient.SetupGet(x => x.Backend).Returns(WorkItemBackend.AzureDevOps);
+            adoClient.Setup(x => x.FindExistingByAdvisoryAsync(It.IsAny<List<Advisory>>(), "ado-project"))
+                .ReturnsAsync(new Dictionary<string, WorkItem>());
+            adoClient.Setup(x => x.CreateBatchAsync(It.IsAny<List<Advisory>>(), "ado-project", false, false))
+                .ReturnsAsync(new List<(Advisory, WorkItem)>
+                {
+                    (advisory, CreateWorkItem("2", "ADO child"))
+                });
+
+            var sut = CreateOrchestrator(config, githubClient, adoClient);
+
+            IReadOnlyList<BackendOutputResult> outputs = await sut.RunAsync(
+                [advisory],
+                whatIf: false,
+                cancellationToken: TestContext.Current.CancellationToken);
+
+            Assert.All(outputs, output => Assert.Equal(GetRetirementsResult.Success, output.Status));
+            githubClient.Verify(x => x.FindExistingByAdvisoryAsync(It.IsAny<List<Advisory>>(), "github-owner/rg-repo"), Times.Once);
+            githubClient.Verify(x => x.CreateBatchAsync(It.IsAny<List<Advisory>>(), It.IsAny<string>(), It.IsAny<bool>(), It.IsAny<bool>()), Times.Never);
+            githubClient.Verify(x => x.FindOrCreateParentAsync(
+                advisory.Properties.RecommendationTypeId,
+                advisory,
+                It.IsAny<Dictionary<string, List<WorkItem>>>(),
+                "github-owner/github-repo",
+                false), Times.Once);
+            adoClient.Verify(x => x.CreateBatchAsync(It.IsAny<List<Advisory>>(), "ado-project", false, false), Times.Once);
+            adoClient.Verify(x => x.FindOrCreateParentAsync(
+                It.IsAny<string>(),
+                It.IsAny<Advisory>(),
+                It.IsAny<Dictionary<string, List<WorkItem>>>(),
+                It.IsAny<string>(),
+                It.IsAny<bool>()), Times.Never);
+        }
+
+        [Fact]
+        public async Task RunAsync_MixedBackends_HonorIndependentUnmappedFallbackSettings()
+        {
+            var config = BuildConfig(new Dictionary<string, string?>
+            {
+                [ConfigKeys.GitHub.WorkItemScope] = nameof(WorkItemScope.PerContainer),
+                [ConfigKeys.GitHub.UnmappedRepository] = "github-owner/unmapped",
+                [ConfigKeys.GitHub.UseTriageRepoForUnmapped] = "false",
+                [ConfigKeys.GitHub.CreateParentWorkItems] = "false",
+                [ConfigKeys.AzureDevOps.WorkItemScope] = nameof(WorkItemScope.PerContainer),
+                [ConfigKeys.AzureDevOps.UnmappedRepository] = "ado-unmapped",
+                [ConfigKeys.AzureDevOps.UseTriageRepoForUnmapped] = "true",
+                [ConfigKeys.AzureDevOps.CreateParentWorkItems] = "false"
+            });
+            Advisory advisory = CreateAdvisory("unmapped-advisory", "type-unmapped");
+
+            var githubClient = new Mock<IWorkItemClient>();
+            githubClient.SetupGet(x => x.Backend).Returns(WorkItemBackend.GitHub);
+            githubClient.Setup(x => x.FindExistingByAdvisoryAsync(It.IsAny<List<Advisory>>(), "github-owner/unmapped"))
+                .ReturnsAsync(new Dictionary<string, WorkItem>());
+            githubClient.Setup(x => x.CreateBatchAsync(It.IsAny<List<Advisory>>(), "github-owner/unmapped", false, false))
+                .ReturnsAsync(new List<(Advisory, WorkItem)>
+                {
+                    (advisory, CreateWorkItem("3", "GitHub unmapped child"))
+                });
+
+            var adoClient = new Mock<IWorkItemClient>();
+            adoClient.SetupGet(x => x.Backend).Returns(WorkItemBackend.AzureDevOps);
+            adoClient.Setup(x => x.FindExistingByAdvisoryAsync(It.IsAny<List<Advisory>>(), "ado-project"))
+                .ReturnsAsync(new Dictionary<string, WorkItem>());
+            adoClient.Setup(x => x.CreateBatchAsync(It.IsAny<List<Advisory>>(), "ado-project", false, false))
+                .ReturnsAsync(new List<(Advisory, WorkItem)>
+                {
+                    (advisory, CreateWorkItem("4", "ADO triage child"))
+                });
+
+            var sut = CreateOrchestrator(config, githubClient, adoClient);
+
+            IReadOnlyList<BackendOutputResult> outputs = await sut.RunAsync(
+                [advisory],
+                whatIf: false,
+                cancellationToken: TestContext.Current.CancellationToken);
+
+            Assert.All(outputs, output => Assert.Equal(GetRetirementsResult.Success, output.Status));
+            githubClient.Verify(x => x.CreateBatchAsync(It.IsAny<List<Advisory>>(), "github-owner/unmapped", false, false), Times.Once);
+            adoClient.Verify(x => x.CreateBatchAsync(It.IsAny<List<Advisory>>(), "ado-project", false, false), Times.Once);
+            adoClient.Verify(x => x.CreateBatchAsync(It.IsAny<List<Advisory>>(), "ado-unmapped", false, false), Times.Never);
         }
     }
 }
