@@ -14,11 +14,6 @@ namespace Microsoft.RetireaBot.Helpers.Orchestration
         private readonly IVendorSettingsProvider _vendorSettings;
         private readonly Helpers.Azure.ManagementClient _managementClient;
 
-        private readonly bool _createParentWorkItems;
-        private readonly bool _createChildWorkItems;
-        private readonly bool _useTriageRepoForUnmapped;
-        private readonly WorkItemScope _workItemScope;
-
         public BackendOrchestrator(
             ILoggerFactory loggerFactory,
             IConfiguration config,
@@ -30,13 +25,6 @@ namespace Microsoft.RetireaBot.Helpers.Orchestration
             _workItemClients = workItemClients.ToList();
             _vendorSettings = vendorSettings;
             _managementClient = managementClient;
-
-            _createParentWorkItems = config.GetSection(ConfigKeys.App.CreateParentWorkItems).Get<bool?>() ?? true;
-            _createChildWorkItems = config.GetSection(ConfigKeys.App.CreateChildWorkItems).Get<bool?>() ?? true;
-            _useTriageRepoForUnmapped = config.GetSection(ConfigKeys.App.UseTriageRepoForUnmapped).Get<bool?>() ?? true;
-            _workItemScope = Enum.Parse<WorkItemScope>(
-                config.GetSection(ConfigKeys.App.WorkItemScope).Get<string>() ?? nameof(WorkItemScope.Monolithic),
-                ignoreCase: true);
         }
 
         public async Task<IReadOnlyList<BackendOutputResult>> RunAsync(
@@ -50,13 +38,8 @@ namespace Microsoft.RetireaBot.Helpers.Orchestration
                 return [];
             }
 
-            IReadOnlyDictionary<string, string> subscriptionToMgMap =
-                _workItemScope == WorkItemScope.PerContainer
-                    ? await ResolveSubscriptionToMgMapAsync(cancellationToken)
-                    : new Dictionary<string, string>();
-
             var tasks = _workItemClients
-                .Select(c => ProcessBackendAsync(c, advisories, subscriptionToMgMap, whatIf, cancellationToken));
+                .Select(c => ProcessBackendAsync(c, advisories, whatIf, cancellationToken));
 
             return await Task.WhenAll(tasks);
         }
@@ -64,7 +47,6 @@ namespace Microsoft.RetireaBot.Helpers.Orchestration
         private async Task<BackendOutputResult> ProcessBackendAsync(
             IWorkItemClient workItemClient,
             List<Advisory> advisories,
-            IReadOnlyDictionary<string, string> subscriptionToMgMap,
             bool whatIf,
             CancellationToken cancellationToken)
         {
@@ -81,6 +63,10 @@ namespace Microsoft.RetireaBot.Helpers.Orchestration
             try
             {
                 IVendorSettings vendor = _vendorSettings.For(workItemClient.Backend);
+                IReadOnlyDictionary<string, string> subscriptionToMgMap =
+                   vendor.WorkItemScope == WorkItemScope.PerContainer
+                        ? await ResolveSubscriptionToMgMapAsync(cancellationToken)
+                        : new Dictionary<string, string>();
 
                 Dictionary<string, List<Advisory>> advisoriesByRepo =
                     RouteAdvisoriesForBackend(vendor, advisories, subscriptionToMgMap);
@@ -98,7 +84,7 @@ namespace Microsoft.RetireaBot.Helpers.Orchestration
                     representativeByType,
                     cancellationToken);
 
-                if (_createParentWorkItems)
+                if (vendor.CreateParentWorkItems)
                 {
                     await CreateParentWorkItemsAsync(
                         workItemClient,
@@ -110,7 +96,7 @@ namespace Microsoft.RetireaBot.Helpers.Orchestration
                         cancellationToken);
                 }
 
-                if (_createChildWorkItems && attempted > 0)
+                if (vendor.CreateChildWorkItems && attempted > 0)
                 {
                     if (created == 0)
                     {
@@ -165,23 +151,23 @@ namespace Microsoft.RetireaBot.Helpers.Orchestration
                     "[{Backend}] Found {ExistingCount} existing issues, creating {NewCount} new work items in {Repo}",
                     output.BackendName, existingWorkItems.Count, advisoriesToCreate.Count, repo);
 
-                bool assignCopilot = _vendorSettings.For(workItemClient.Backend).AssignCopilot;
+                IVendorSettings vendor = _vendorSettings.For(workItemClient.Backend);
 
-                List<(Advisory, WorkItem)> createdWorkItems = _createChildWorkItems
-                    ? await workItemClient.CreateBatchAsync(advisoriesToCreate, repo, assignCopilot, whatIf) ?? []
+                List<(Advisory, WorkItem)> createdWorkItems = vendor.CreateChildWorkItems
+                    ? await workItemClient.CreateBatchAsync(advisoriesToCreate, repo, vendor.AssignCopilot, whatIf) ?? []
                     : [];
 
                 attempted += advisoriesToCreate.Count;
                 created += createdWorkItems.Count;
 
-                if (_createChildWorkItems && advisoriesToCreate.Count > 0 && createdWorkItems.Count == 0)
+                if (vendor.CreateChildWorkItems && advisoriesToCreate.Count > 0 && createdWorkItems.Count == 0)
                 {
                     _logger.LogError(
                         "[{Backend}] All {Count} work item creations failed for repository {Repo}",
                         output.BackendName, advisoriesToCreate.Count, repo);
                 }
 
-                if (_createParentWorkItems)
+                if (vendor.CreateParentWorkItems)
                 {
                     // Map existing issues back to their advisory by name.
                     var existingPairs = existingWorkItems.Select(kvp =>
@@ -227,6 +213,7 @@ namespace Microsoft.RetireaBot.Helpers.Orchestration
             BackendOutputResult output,
             CancellationToken cancellationToken)
         {
+            int parentIndex = 0;
             foreach (var (typeId, childItemsByRepo) in childItemsByType)
             {
                 cancellationToken.ThrowIfCancellationRequested();
@@ -241,6 +228,12 @@ namespace Microsoft.RetireaBot.Helpers.Orchestration
                 if (result != null)
                 {
                     output.Parents.Add(result);
+                }
+
+                parentIndex++;
+                if (workItemClient.Backend == WorkItemBackend.GitHub && parentIndex < childItemsByType.Count)
+                {
+                    await Task.Delay(2000, cancellationToken);
                 }
             }
         }
@@ -279,7 +272,7 @@ namespace Microsoft.RetireaBot.Helpers.Orchestration
             Advisory advisory,
             IReadOnlyDictionary<string, string> subscriptionToMgMap)
         {
-            if (_workItemScope != WorkItemScope.PerContainer)
+            if (vendor.WorkItemScope != WorkItemScope.PerContainer)
             {
                 return vendor.TargetRepository;
             }
@@ -295,10 +288,10 @@ namespace Microsoft.RetireaBot.Helpers.Orchestration
 
             if (mapping != null)
             {
-                return mapping.Repository;
+                return mapping.Target;
             }
 
-            return (!_useTriageRepoForUnmapped && !string.IsNullOrEmpty(vendor.UnmappedRepository))
+            return (!vendor.UseTriageRepoForUnmapped && !string.IsNullOrEmpty(vendor.UnmappedRepository))
                 ? vendor.UnmappedRepository
                 : vendor.TargetRepository;
         }

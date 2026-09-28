@@ -20,17 +20,19 @@ namespace Microsoft.RetireaBot.Helpers.GitHub
 
         private readonly CredentialProvider _credentialProvider;
         private readonly ILogger _logger;
+        private readonly IVendorSettings _vendorSettings;
 
         public WorkItemClient(ILoggerFactory loggerFactory, CredentialProvider credentialProvider, IVendorSettingsProvider vendorSettings)
         {
             _logger = loggerFactory.CreateLogger<WorkItemClient>();
             _credentialProvider = credentialProvider;
 
-            IVendorSettings s = vendorSettings.For(WorkItemBackend.GitHub);
-            _advisoryLabel = s.AdvisoryLabel;
-            _advisoryParentLabel = s.AdvisoryParentLabel;
-            _advisoryLabelPrefix = s.AdvisoryLabelPrefix;
-            _parentLabelPrefix = s.AdvisoryParentLabelPrefix;
+            _vendorSettings = vendorSettings.For(WorkItemBackend.GitHub);
+
+            _advisoryLabel = _vendorSettings.AdvisoryLabel;
+            _advisoryParentLabel = _vendorSettings.AdvisoryParentLabel;
+            _advisoryLabelPrefix = _vendorSettings.AdvisoryLabelPrefix;
+            _parentLabelPrefix = _vendorSettings.AdvisoryParentLabelPrefix;
         }
 
         private static WorkItem ToWorkItem(Issue issue)
@@ -82,29 +84,24 @@ namespace Microsoft.RetireaBot.Helpers.GitHub
                     }
                 };
 
-                try
+                var results = await (await _credentialProvider.GetPrimaryClient()).Search.SearchIssues(searchRequest);
+
+                for (int j = 0; j < results.Items.Count; j++)
                 {
-                    var results = await (await _credentialProvider.GetPrimaryClient()).Search.SearchIssues(searchRequest);
+                    var issue = results.Items[j];
+                    var issueLabels = issue.Labels.Select(l => l.Name);
 
-                    for (int j = 0; j < results.Items.Count; j++)
+                    foreach (var advisory in batch)
                     {
-                        var issue = results.Items[j];
-                        var advisoryLabel = issue.Labels.FirstOrDefault(l => l.Name.StartsWith(_advisoryLabelPrefix));
-
-                        if (advisoryLabel != null)
+                        if (WorkItemClientCommon.HasAdvisoryLabel(
+                            issueLabels,
+                            _advisoryLabelPrefix,
+                            advisory.Name,
+                            MaxLabelLength))
                         {
-
-                            var matchedAdvisory = batch.FirstOrDefault(a => WorkItemClientCommon.GenerateAdvisoryLabel(_advisoryLabelPrefix, a.Name, MaxLabelLength) == advisoryLabel.Name);
-                            if (matchedAdvisory != null)
-                            {
-                                existingIssues[matchedAdvisory.Name] = ToWorkItem(issue);
-                            }
+                            existingIssues[advisory.Name] = ToWorkItem(issue);
                         }
                     }
-                }
-                catch (Exception ex)
-                {
-                    _logger.LogError(ex, "Failed to search for existing issues in batch.");
                 }
 
                 // Respect GitHub search rate limits (30 requests/minute)
@@ -118,8 +115,6 @@ namespace Microsoft.RetireaBot.Helpers.GitHub
 
         public async Task<List<(Advisory, WorkItem)>> CreateBatchAsync(List<Advisory> advisories, string targetRepo, bool assignCopilot, bool whatIf)
         {
-            SemaphoreSlim semaphore = new SemaphoreSlim(5);
-
             GitHubClient? ghClient = _credentialProvider.GetCopilotCapableClient();
             if (ghClient == null)
             {
@@ -142,9 +137,11 @@ namespace Microsoft.RetireaBot.Helpers.GitHub
                 await EnsureLabelsExistAsync(ghClient, repoParts[0], repoParts[1], sharedLabels);
             }
 
-            var created = advisories.Select(async advisory =>
+            var results = new List<(Advisory, WorkItem)>();
+
+            for (int i = 0; i < advisories.Count; i++)
             {
-                await semaphore.WaitAsync();
+                Advisory advisory = advisories[i];
 
                 try
                 {
@@ -165,35 +162,33 @@ namespace Microsoft.RetireaBot.Helpers.GitHub
                         _logger.LogInformation("[WhatIf] Would create issue for advisory {AdvisoryId}: {Title}",
                             advisory.Name, newIssue.Title);
 
-                        return CreateWhatIf(newIssue.Title, newIssue.Body ?? string.Empty, newIssue.Labels.ToList(), newIssue.Assignees.ToList());
+                        results.Add((advisory, CreateWhatIf(
+                            newIssue.Title,
+                            newIssue.Body ?? string.Empty,
+                            newIssue.Labels.ToList(),
+                            newIssue.Assignees.ToList())));
+                        continue;
                     }
 
                     var created = await ghClient.Issue.Create(repoParts[0], repoParts[1], newIssue);
                     _logger.LogInformation("Created issue #{Number} for advisory {AdvisoryId}",
                         created.Number, advisory.Name);
 
-                    return ToWorkItem(created);
+                    results.Add((advisory, ToWorkItem(created)));
                 }
                 catch (Exception ex)
                 {
                     _logger.LogError(ex, "Failed to create issue for advisory {AdvisoryId}", advisory.Name);
-                    return null;
+                    throw;
                 }
-                finally
+
+                if (i + 1 < advisories.Count)
                 {
-                    semaphore.Release();
+                    await Task.Delay(1000);
                 }
-            });
-
-            var results = await Task.WhenAll(created);
-
-            if (results == null)
-            {
-                return new List<(Advisory, WorkItem)>();
             }
-            return [.. results.Select((r, i) => (advisory: advisories[i], issue: r))
-                  .Where(p => p.issue != null)
-                  .Select(p => (p.advisory, p.issue!))];
+
+            return results;
         }
 
         /// <summary>
@@ -214,15 +209,12 @@ namespace Microsoft.RetireaBot.Helpers.GitHub
                     try
                     {
                         await ghClient.Issue.Labels.Create(owner, repo, new NewLabel(name, "ededed"));
+                        await Task.Delay(1000);
                     }
                     catch (ApiValidationException)
                     {
                         // Label was created concurrently (or already exists) — safe to ignore.
                     }
-                }
-                catch (Exception ex)
-                {
-                    _logger.LogWarning(ex, "Failed to ensure label {Label} exists in {Owner}/{Repo}", name, owner, repo);
                 }
             }
         }
@@ -245,7 +237,7 @@ namespace Microsoft.RetireaBot.Helpers.GitHub
 ### Details
 - **Retirement Date:** {props.ExtendedProperties?.RetirementDate}
 - **Retirement Feature:** {props.ExtendedProperties?.RetirementFeatureName}
-- **Resource ID:** {props.ResourceMetadata?.ResourceId}
+{(_vendorSettings.IncludeResourceId ? $"- **Resource ID:** {props.ResourceMetadata?.ResourceId}" : "")}
 - **Last Updated:** {props.LastUpdated}
 
 ### Advisory ID
@@ -346,7 +338,7 @@ namespace Microsoft.RetireaBot.Helpers.GitHub
             Issue? existingParent = null;
             GitHubClient? ghClient = await _credentialProvider.GetPrimaryClient();
 
-            SearchIssuesRequest searchRequest = new SearchIssuesRequest($"repo:{parentRepo} label:{parentLabel}, {_advisoryParentLabel}")
+            SearchIssuesRequest searchRequest = new SearchIssuesRequest($"repo:{parentRepo} label:\"{parentLabel}\" label:\"{_advisoryParentLabel}\"")
             {
                 Type = IssueTypeQualifier.Issue,
                 Repos = new RepositoryCollection
@@ -355,17 +347,10 @@ namespace Microsoft.RetireaBot.Helpers.GitHub
                     }
             };
 
-            try
-            {
-                SearchIssuesResult results = await ghClient.Search.SearchIssues(searchRequest);
-                existingParent = results.Items.FirstOrDefault(i =>
-                    i.Labels.Any(l => l.Name == parentLabel)
-                );
-            }
-            catch (Exception ex)
-            {
-                _logger.LogError(ex, "Failed to search for existing parent issue.");
-            }
+            SearchIssuesResult results = await ghClient.Search.SearchIssues(searchRequest);
+            existingParent = results.Items.FirstOrDefault(i =>
+                i.Labels.Any(l => l.Name == parentLabel)
+            );
 
             if (existingParent != null)
             {
@@ -439,35 +424,35 @@ namespace Microsoft.RetireaBot.Helpers.GitHub
 
             _logger.LogInformation("Cannot find existing parent, creating new parent issue for {RecommendationTypeId}...", recommendationTypeId);
 
+            NewIssue newIssue = new NewIssue($"Retirement Tracking: {representativeAdvisory.Properties.ShortDescription.Problem}")
+            {
+                Body = GenerateParentIssueBody(representativeAdvisory, childItemsByRepo, parentRepo)
+            };
+
+            // Add labels including the advisory GUID
+            newIssue.Labels.Add(parentLabel);
+            newIssue.Labels.Add(_advisoryLabel);
+            newIssue.Labels.Add(_advisoryParentLabel);
+            newIssue.Labels.Add(representativeAdvisory.Properties.Impact.ToLower());
+
+            int childWorkItemCount = childItemsByRepo.Values.Sum(i => i.Count);
+
+            if (whatIf)
+            {
+                _logger.LogInformation("[WhatIf] Would create a new parent issue for recommendation {TypeId} with {Count} child issues",
+                    recommendationTypeId, childWorkItemCount);
+
+                return new ParentWorkItemResult()
+                {
+                    Action = ParentWorkItemAction.Created,
+                    ChildCount = childWorkItemCount,
+                    RecommendationTypeId = recommendationTypeId,
+                    WorkItem = CreateWhatIf(newIssue.Title, newIssue.Body ?? string.Empty, newIssue.Labels.ToList(), newIssue.Assignees.ToList())
+                };
+            }
+
             try
             {
-                NewIssue newIssue = new NewIssue($"Retirement Tracking: {representativeAdvisory.Properties.ShortDescription.Problem}")
-                {
-                    Body = GenerateParentIssueBody(representativeAdvisory, childItemsByRepo, parentRepo)
-                };
-
-                // Add labels including the advisory GUID
-                newIssue.Labels.Add(parentLabel);
-                newIssue.Labels.Add(_advisoryLabel);
-                newIssue.Labels.Add(_advisoryParentLabel);
-                newIssue.Labels.Add(representativeAdvisory.Properties.Impact.ToLower());
-
-                int childWorkItemCount = childItemsByRepo.Values.Sum(i => i.Count);
-
-                if (whatIf)
-                {
-                    _logger.LogInformation("[WhatIf] Would create a new parent issue for recommendation {TypeId} with {Count} child issues",
-                        recommendationTypeId, childWorkItemCount);
-
-                    return new ParentWorkItemResult()
-                    {
-                        Action = ParentWorkItemAction.Created,
-                        ChildCount = childWorkItemCount,
-                        RecommendationTypeId = recommendationTypeId,
-                        WorkItem = CreateWhatIf(newIssue.Title, newIssue.Body ?? string.Empty, newIssue.Labels.ToList(), newIssue.Assignees.ToList())
-                    };
-                }
-
                 var created = await ghClient.Issue.Create(repoParts[0], repoParts[1], newIssue);
                 _logger.LogInformation("Created parent issue #{Number} for recommendation {TypeId} with {Count} child work items",
                     created.Number, recommendationTypeId, childWorkItemCount);
@@ -482,9 +467,9 @@ namespace Microsoft.RetireaBot.Helpers.GitHub
             }
             catch (Exception ex)
             {
-                _logger.LogError(ex, "Failed to create issue for advisory {AdvisoryId}", representativeAdvisory.Name);
+                _logger.LogError(ex, "Failed to create parent issue for advisory {AdvisoryId}", representativeAdvisory.Name);
+                throw;
             }
-            return null;
         }
         [GeneratedRegex(@"- \[[ x]{1,2}\] (?<ref>([^\s]+)?#\d+)")]
         private static partial Regex TaskListPattern();

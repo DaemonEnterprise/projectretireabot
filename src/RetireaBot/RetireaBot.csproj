@@ -7,6 +7,7 @@
     <OutputType>Exe</OutputType>
     <ImplicitUsings>enable</ImplicitUsings>
     <Nullable>enable</Nullable>
+    <UserSecretsId>1919101f-532e-49db-8f37-3161b3d93081</UserSecretsId>
   </PropertyGroup>
   <ItemGroup>
     <FrameworkReference Include="Microsoft.AspNetCore.App" />
@@ -22,13 +23,13 @@
     <PackageReference Include="Microsoft.Azure.Functions.Worker.Extensions.Timer" Version="4.3.1" />
     <PackageReference Include="Microsoft.Azure.Functions.Worker.OpenTelemetry" Version="1.2.0" />
     <PackageReference Include="Microsoft.Azure.Functions.Worker.Sdk" Version="2.0.7" />
-    <PackageReference Include="Microsoft.Extensions.Http.Polly" Version="10.0.9" />
-    <PackageReference Include="Microsoft.IdentityModel.KeyVaultExtensions" Version="7.7.1" />
+    <PackageReference Include="Microsoft.Extensions.Http.Polly" Version="10.0.11" />
+    <PackageReference Include="Microsoft.IdentityModel.KeyVaultExtensions" Version="7.7.3" />
     <PackageReference Include="Microsoft.TeamFoundationServer.Client" Version="20.256.2" />
     <PackageReference Include="Microsoft.VisualStudio.Services.Client" Version="20.256.2" />
-    <PackageReference Include="System.Configuration.ConfigurationManager" Version="10.0.9" />
+    <PackageReference Include="System.Configuration.ConfigurationManager" Version="10.0.11" />
     <PackageReference Include="Octokit" Version="14.0.0" />
-    <PackageReference Include="System.IdentityModel.Tokens.Jwt" Version="8.19.1" />
+    <PackageReference Include="System.IdentityModel.Tokens.Jwt" Version="7.7.1" />
     <PackageReference Include="Microsoft.Rest.ClientRuntime" Version="2.3.24" />
   </ItemGroup>
   <ItemGroup>

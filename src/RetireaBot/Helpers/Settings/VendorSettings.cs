@@ -20,6 +20,8 @@ namespace Microsoft.RetireaBot.Helpers.Settings
             AdvisoryParentLabelPrefix = config[$"{section}:AdvisoryParentLabelPrefix"] ?? "advisor-type-";
             AssignCopilot = supportsCopilot
                                   && (config.GetSection($"{section}:AssignCopilot").Get<bool?>() ?? false);
+            CreateParentWorkItems = config.GetSection($"{section}:CreateParentWorkItems").Get<bool?>() ?? true;
+            CreateChildWorkItems = config.GetSection($"{section}:CreateChildWorkItems").Get<bool?>() ?? true;
             TargetRepository = config.GetSection($"{section}:TargetRepository").Get<string?>() ?? throw new InvalidOperationException($"{section}:TargetRepository is not configured.");
 
             string? mappingJson = config.GetSection($"{section}:TargetContainerMapping").Get<string>();
@@ -27,8 +29,11 @@ namespace Microsoft.RetireaBot.Helpers.Settings
                 ? JsonSerializer.Deserialize<List<AzureRepositoryMap>>(mappingJson) ?? []
                 : [];
 
+            IncludeResourceId = config.GetSection($"{section}:IncludeResourceId").Get<bool?>() ?? false;
             TargetResourceGroup = config.GetSection($"{section}:TargetResourceGroup").Get<string>();
             UnmappedRepository = config.GetSection($"{section}:UnmappedRepository").Get<string>();
+            UseTriageRepoForUnmapped = config.GetSection($"{section}:UseTriageRepoForUnmapped").Get<bool?>() ?? false;
+            WorkItemScope = Enum.Parse<WorkItemScope>(config.GetSection($"{section}:WorkItemScope").Get<string?>() ?? nameof(WorkItemScope.Monolithic), ignoreCase: true);
         }
 
         public WorkItemBackend Backend { get; }
@@ -37,10 +42,15 @@ namespace Microsoft.RetireaBot.Helpers.Settings
         public string AdvisoryLabelPrefix { get; }
         public string AdvisoryParentLabelPrefix { get; }
         public bool AssignCopilot { get; }
+        public bool CreateParentWorkItems { get; }
+        public bool CreateChildWorkItems { get; }
         public string TargetRepository { get; }
+        public bool IncludeResourceId { get; }
         public List<AzureRepositoryMap> TargetContainerMapping { get; }
         public string? TargetResourceGroup { get; }
         public string? UnmappedRepository { get; }
+        public bool UseTriageRepoForUnmapped { get; }
+        public WorkItemScope WorkItemScope { get; }
     }
 
 

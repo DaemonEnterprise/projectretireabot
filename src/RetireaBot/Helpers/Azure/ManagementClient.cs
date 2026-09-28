@@ -7,7 +7,7 @@ namespace Microsoft.RetireaBot.Helpers.Azure
 {
     public class ManagementClient
     {
-        private HttpClient _client;
+        private readonly HttpClient _client;
 
         public ManagementClient(HttpClient client)
         {
@@ -31,24 +31,43 @@ namespace Microsoft.RetireaBot.Helpers.Azure
         public virtual async Task<QueryResult<T>> RunQueryAsync<T>(string subscriptionId, string query)
         {
             string uri = "/providers/Microsoft.ResourceGraph/resources?api-version=2022-10-01";
+            string? skipToken = null;
+            QueryResult<T> aggregate = new();
 
-            var requestBody = new
+            do
             {
-                subscriptions = new[] { subscriptionId },
-                query
-            };
+                var requestBody = new Dictionary<string, object>
+                {
+                    ["subscriptions"] = new[] { subscriptionId },
+                    ["query"] = query
+                };
+                if (!string.IsNullOrEmpty(skipToken))
+                {
+                    requestBody["options"] = new Dictionary<string, string>
+                    {
+                        ["$skipToken"] = skipToken
+                    };
+                }
 
-            var response = await _client.PostAsJsonAsync(uri, requestBody);
-            response.EnsureSuccessStatusCode();
+                var response = await _client.PostAsJsonAsync(uri, requestBody);
+                response.EnsureSuccessStatusCode();
 
-            var result = await response.Content.ReadFromJsonAsync<QueryResult<T>>();
+                var page = await response.Content.ReadFromJsonAsync<QueryResult<T>>();
 
-            if (result == null)
-            {
-                throw new InvalidOperationException("Got a null object when attempting to deserialise Azure Resource Graph Query response.");
+                if (page == null)
+                {
+                    throw new InvalidOperationException("Got a null object when attempting to deserialise Azure Resource Graph Query response.");
+                }
+
+                aggregate.Data.AddRange(page.Data);
+                aggregate.Length = aggregate.Data.Count;
+                aggregate.TotalRecords = page.TotalRecords;
+                aggregate.ResultTruncated = page.ResultTruncated;
+                skipToken = page.SkipToken;
             }
+            while (!string.IsNullOrEmpty(skipToken));
 
-            return result;
+            return aggregate;
         }
 
         public virtual async Task<Advisory> GetAdvisoryAsync(string uri)

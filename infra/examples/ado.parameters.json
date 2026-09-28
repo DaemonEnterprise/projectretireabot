@@ -1,0 +1,32 @@
+{
+  "$schema": "https://schema.management.azure.com/schemas/2015-01-01/deploymentParameters.json#",
+  "contentVersion": "1.0.0.0",
+  "parameters": {
+    "deploymentName": {
+      "value": "azeg"
+    },
+    "location": {
+      "value": "uksouth"
+    },
+    "workItemBackend": {
+      "value": [
+        "AzureDevOps"
+      ]
+    },
+    "dataSinkBackend": {
+      "value": []
+    },
+    "azureDevOpsOptions": {
+      "value": {
+        "clientId": "00000000-0000-0000-0000-000000000000",
+        "tenantId": "00000000-0000-0000-0000-000000000000",
+        "clientSecret": "",
+        "organisationUrl": "https://dev.azure.com/ExampleOrganisation",
+        "PAT": "replace_with_azure_devops_pat",
+        "routing": {
+          "targetRepository": "ExampleProject"
+        }
+      }
+    }
+  }
+}

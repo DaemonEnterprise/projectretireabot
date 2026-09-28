@@ -13,6 +13,9 @@ namespace Microsoft.RetireaBot.Models.Azure
         [JsonPropertyName("resultTruncated")]
         public string? ResultTruncated { get; set; }
 
+        [JsonPropertyName("$skipToken")]
+        public string? SkipToken { get; set; }
+
         [JsonPropertyName("totalRecords")]
         public int TotalRecords { get; set; }
     }

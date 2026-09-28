@@ -32,10 +32,13 @@ namespace Microsoft.RetireaBot.Tests.Functions
             {
                 [ConfigKeys.GitHub.TargetRepository] = "owner/repo",
                 [ConfigKeys.AzureDevOps.TargetRepository] = "AdoProject",
-                [ConfigKeys.App.WorkItemScope] = "Monolithic",
+                [ConfigKeys.AzureDevOps.WorkItemScope] = "Monolithic",
+                [ConfigKeys.GitHub.WorkItemScope] = "Monolithic",
                 [ConfigKeys.App.AssignGitHubCopilot] = "false",
-                [ConfigKeys.App.CreateParentWorkItems] = "true",
-                [ConfigKeys.App.CreateChildWorkItems] = "true",
+                [ConfigKeys.AzureDevOps.CreateParentWorkItems] = "true",
+                [ConfigKeys.AzureDevOps.CreateChildWorkItems] = "true",
+                [ConfigKeys.GitHub.CreateParentWorkItems] = "true",
+                [ConfigKeys.GitHub.CreateChildWorkItems] = "true",
                 [ConfigKeys.App.HTTPEndpointEnable] = "true",
                 [ConfigKeys.App.HTTPEndpointOutput] = "true",
                 [ConfigKeys.App.HTTPEndpointWhatIf] = "true",
@@ -188,10 +191,12 @@ namespace Microsoft.RetireaBot.Tests.Functions
         {
             var config = BuildConfig(new Dictionary<string, string?>
             {
-                [ConfigKeys.GitHub.TargetRepository] = "example/repo",
                 [ConfigKeys.AzureDevOps.TargetRepository] = "AdoProject",
-                [ConfigKeys.App.WorkItemScope] = WorkItemScope.Monolithic.ToString(),
-                [ConfigKeys.App.CreateChildWorkItems] = "true",
+                [ConfigKeys.AzureDevOps.WorkItemScope] = WorkItemScope.Monolithic.ToString(),
+                [ConfigKeys.AzureDevOps.CreateChildWorkItems] = "true",
+                [ConfigKeys.GitHub.TargetRepository] = "example/repo",
+                [ConfigKeys.GitHub.WorkItemScope] = WorkItemScope.Monolithic.ToString(),
+                [ConfigKeys.GitHub.CreateChildWorkItems] = "true",
             });
 
             var (mgmtClient, handler) = BuildMockManagementClient();
@@ -232,9 +237,11 @@ namespace Microsoft.RetireaBot.Tests.Functions
             var config = BuildConfig(new Dictionary<string, string?>
             {
                 [ConfigKeys.GitHub.TargetRepository] = "example/repo",
+                [ConfigKeys.GitHub.WorkItemScope] = WorkItemScope.Monolithic.ToString(),
+                [ConfigKeys.GitHub.CreateChildWorkItems] = "true",
                 [ConfigKeys.AzureDevOps.TargetRepository] = "AdoProject",
-                [ConfigKeys.App.WorkItemScope] = WorkItemScope.Monolithic.ToString(),
-                [ConfigKeys.App.CreateChildWorkItems] = "true",
+                [ConfigKeys.AzureDevOps.WorkItemScope] = WorkItemScope.Monolithic.ToString(),
+                [ConfigKeys.AzureDevOps.CreateChildWorkItems] = "true",
             });
 
             var (mgmtClient, handler) = BuildMockManagementClient();

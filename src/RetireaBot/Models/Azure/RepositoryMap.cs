@@ -16,7 +16,7 @@ namespace Microsoft.RetireaBot.Models.Azure
         public required string Name { get; set; }
         [JsonPropertyName("type")]
         public required AzureContainerType Type { get; set; }
-        [JsonPropertyName("repository")]
-        public required string Repository { get; set; }
+        [JsonPropertyName("target")]
+        public required string Target { get; set; }
     }
 }

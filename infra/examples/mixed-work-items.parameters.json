@@ -1,0 +1,52 @@
+{
+  "$schema": "https://schema.management.azure.com/schemas/2015-01-01/deploymentParameters.json#",
+  "contentVersion": "1.0.0.0",
+  "parameters": {
+    "deploymentName": {
+      "value": "azegmix"
+    },
+    "location": {
+      "value": "uksouth"
+    },
+    "workItemBackend": {
+      "value": [
+        "GitHub",
+        "AzureDevOps"
+      ]
+    },
+    "dataSinkBackend": {
+      "value": []
+    },
+    "gitHubOptions": {
+      "value": {
+        "PAT": "github_pat_replace_me",
+        "routing": {
+          "scope": "perContainer",
+          "targetRepository": "ExampleOwner/ParentRepository",
+          "unmappedRepository": "ExampleOwner/UnmappedRepository",
+          "containerMappings": [
+            {
+              "name": "rg-production",
+              "type": "ResourceGroup",
+              "target": "ExampleOwner/ProductionRepository"
+            }
+          ]
+        }
+      }
+    },
+    "azureDevOpsOptions": {
+      "value": {
+        "clientId": "00000000-0000-0000-0000-000000000000",
+        "tenantId": "00000000-0000-0000-0000-000000000000",
+        "clientSecret": "",
+        "organisationUrl": "https://dev.azure.com/ExampleOrganisation",
+        "routing": {
+          "targetRepository": "ExampleProject"
+        },
+        "workItemConfiguration": {
+          "createParentWorkItems": false
+        }
+      }
+    }
+  }
+}
