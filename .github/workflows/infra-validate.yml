@@ -2,7 +2,8 @@ name: "Infrastructure Validate"
 on:
     pull_request:
         paths: ["infra/**", ".github/workflows/infra-validate.yml"]
-
+    workflow_dispatch:
+    
 jobs:
     bicep-build:
         runs-on: ubuntu-latest
